@@ -1,6 +1,3 @@
--- mcli / ui.lua
--- Терминал GUI. Требует pkg-manager.lua (mcli глобал) уже загруженным.
-
 local Players          = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService     = game:GetService("TweenService")
@@ -8,7 +5,7 @@ local RunService       = game:GetService("RunService")
 local HttpService      = game:GetService("HttpService")
 local mcli = getgenv().mcli
 assert(mcli, "ui.lua: pkg-manager.lua must be loaded first")
-local MIN_W, MIN_H = 400, 200
+local MIN_W, MIN_H = 400, 220
 local DEF_W, DEF_H = 900, 500
 local TITLE_H      = 20
 local BTN_SIZE     = 10
@@ -17,12 +14,14 @@ local PREFS_PATH = "mjs/terminal/preferences.json"
 local prefs = {
     nickname        = "nickname",
     Transparent     = 0,
+    BackgroundColor = "#111111",
     BackgroundImage = "",
     HideKeybind     = "F5",
 }
 
 local function validatePrefs()
     local warns = {}
+
     local t = tonumber(prefs.Transparent)
     if not t or t < 0 or t > 1.0 then
         table.insert(warns, "Invalid Transparent in preferences.json (0 - 1.0)")
@@ -31,18 +30,21 @@ local function validatePrefs()
         prefs.Transparent = t
     end
 
+    local bc = tostring(prefs.BackgroundColor or "#111111")
+    if not bc:match("^#%x%x%x%x%x%x$") then
+        table.insert(warns, "Invalid BackgroundColor in preferences.json (#rrggbb)")
+        prefs.BackgroundColor = "#111111"
+    end
+
     local bg = tostring(prefs.BackgroundImage or "")
     if bg ~= "" and not bg:match("^rbxassetid://") then
         table.insert(warns, "Invalid BackgroundImage in preferences.json (rbxassetid)")
         prefs.BackgroundImage = ""
     end
 
-    local validKeys = {
-        F1=true,F2=true,F3=true,F4=true,F5=true,F6=true,
-        F7=true,F8=true,F9=true,F10=true,F11=true,F12=true,
-    }
-    local hk = tostring(prefs.HideKeybind or "F5")
-    if not validKeys[hk] then
+    local validKeys = { F1=true,F2=true,F3=true,F4=true,F5=true,F6=true,
+                        F7=true,F8=true,F9=true,F10=true,F11=true,F12=true }
+    if not validKeys[tostring(prefs.HideKeybind)] then
         table.insert(warns, "Invalid HideKeybind in preferences.json (F1-F12)")
         prefs.HideKeybind = "F5"
     end
@@ -64,7 +66,6 @@ local function savePrefs()
 end
 
 local startupWarns = loadPrefs()
-
 local function loadFont(path)
     local ok, res = pcall(Font.new, "rbxasset://" .. path)
     return ok and res or Font.new(Enum.Font.Code)
@@ -72,7 +73,6 @@ end
 
 local termFont = loadFont("mjs/terminal/assets/terminal.ttf")
 local uiFont   = loadFont("mjs/terminal/assets/ui.ttf")
-
 local function assetImg(name)
     local ok, id = pcall(getcustomasset, "mjs/terminal/assets/" .. name)
     return ok and id or ""
@@ -89,12 +89,12 @@ local Wrapper = Instance.new("Frame")
 Wrapper.Name                   = "Wrapper"
 Wrapper.Size                   = UDim2.new(0, DEF_W, 0, DEF_H)
 Wrapper.Position               = UDim2.new(0.5, -DEF_W/2, 0.5, -DEF_H/2)
-Wrapper.BackgroundColor3       = Color3.fromHex("#111111")
+Wrapper.BackgroundColor3       = Color3.fromHex(prefs.BackgroundColor)
 Wrapper.BackgroundTransparency = prefs.Transparent
 Wrapper.BorderSizePixel        = 0
 Wrapper.ClipsDescendants       = true
 Wrapper.Parent                 = ScreenGui
-do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = Wrapper end
+do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,8); c.Parent = Wrapper end
 
 local BgImage
 if prefs.BackgroundImage ~= "" then
@@ -118,10 +118,10 @@ TitleBar.BackgroundTransparency = math.min(1, prefs.Transparent + 0.1)
 TitleBar.BorderSizePixel        = 0
 TitleBar.ZIndex                 = 5
 TitleBar.Parent                 = TitleClip
-do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0, 8); c.Parent = TitleBar end
+do local c = Instance.new("UICorner"); c.CornerRadius = UDim.new(0,8); c.Parent = TitleBar end
 
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size                   = UDim2.new(1, -(BTN_SIZE * 2 + BTN_MARGIN * 3 + 8), 0, TITLE_H)
+TitleLabel.Size                   = UDim2.new(1, -(BTN_SIZE*2 + BTN_MARGIN*3 + 8), 0, TITLE_H)
 TitleLabel.Position               = UDim2.new(0, 7, 0, 0)
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Text                   = "Terminal"
@@ -154,23 +154,23 @@ local function makeBtn(name, asset, rightOffset)
 end
 
 local CloseBtn = makeBtn("CloseBtn", "close.png", -(BTN_MARGIN + BTN_SIZE))
-local HideBtn  = makeBtn("HideBtn",  "hide.png",  -(BTN_MARGIN * 2 + BTN_SIZE * 2))
+local HideBtn  = makeBtn("HideBtn",  "hide.png",  -(BTN_MARGIN*2 + BTN_SIZE*2))
 local ResizeBtn = Instance.new("ImageButton")
 ResizeBtn.Size               = UDim2.new(0, 14, 0, 14)
 ResizeBtn.Position           = UDim2.new(1, -16, 1, -16)
 ResizeBtn.BackgroundTransparency = 1
 ResizeBtn.Image              = assetImg("resize.png")
-ResizeBtn.ZIndex             = 10
+ResizeBtn.ZIndex             = 20
 ResizeBtn.Parent             = Wrapper
 if ResizeBtn.Image == "" then
     local lbl = Instance.new("TextLabel")
     lbl.Size = UDim2.new(1,0,1,0); lbl.BackgroundTransparency = 1
     lbl.Text = "⤡"; lbl.TextColor3 = Color3.fromHex("#444444")
-    lbl.TextSize = 11; lbl.FontFace = uiFont; lbl.ZIndex = 11; lbl.Parent = ResizeBtn
+    lbl.TextSize = 11; lbl.FontFace = uiFont; lbl.ZIndex = 21; lbl.Parent = ResizeBtn
 end
 
-
 local OutputFrame = Instance.new("ScrollingFrame")
+OutputFrame.Name                 = "OutputFrame"
 OutputFrame.Size                 = UDim2.new(1, 0, 1, -TITLE_H)
 OutputFrame.Position             = UDim2.new(0, 0, 0, TITLE_H)
 OutputFrame.BackgroundTransparency = 1
@@ -179,18 +179,25 @@ OutputFrame.ScrollBarThickness   = 2
 OutputFrame.ScrollBarImageColor3 = Color3.fromHex("#2a2a2a")
 OutputFrame.ClipsDescendants     = true
 OutputFrame.AutomaticCanvasSize  = Enum.AutomaticSize.Y
-OutputFrame.CanvasSize           = UDim2.new(0, 0, 0, 0)
+OutputFrame.CanvasSize           = UDim2.new(0,0,0,0)
 OutputFrame.Parent               = Wrapper
 
 do
     local l = Instance.new("UIListLayout")
-    l.SortOrder = Enum.SortOrder.LayoutOrder; l.Padding = UDim.new(0, 0); l.Parent = OutputFrame
+    l.SortOrder = Enum.SortOrder.LayoutOrder; l.Padding = UDim.new(0,0); l.Parent = OutputFrame
     local p = Instance.new("UIPadding")
-    p.PaddingLeft = UDim.new(0, 7); p.PaddingRight = UDim.new(0, 7)
-    p.PaddingTop = UDim.new(0, 4); p.PaddingBottom = UDim.new(0, 4)
+    p.PaddingLeft = UDim.new(0,7); p.PaddingRight = UDim.new(0,7)
+    p.PaddingTop = UDim.new(0,4); p.PaddingBottom = UDim.new(0,4)
     p.Parent = OutputFrame
 end
 
+OutputFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+        task.defer(function()
+            if InputBox then InputBox:CaptureFocus() end
+        end)
+    end
+end)
 
 local lineCount = 0
 local function writeLine(text, color)
@@ -219,6 +226,11 @@ local function writeLine(text, color)
             0, math.max(0, OutputFrame.AbsoluteCanvasSize.Y - OutputFrame.AbsoluteSize.Y)
         )
     end)
+
+    local activeTab = TabSystem and TabSystem.getActive and TabSystem.getActive()
+    if activeTab then
+        table.insert(activeTab.outputLines, { text = text, color = color or Color3.fromHex("#e0e0e0") })
+    end
 
     return lbl
 end
@@ -287,42 +299,69 @@ local function spinnerLine(text)
     end
 end
 
-local history    = {}
-local histIdx    = 0
-local currentBuf = ""
-local function historyUp()
-    if #history == 0 then return end
-    if histIdx == 0 then
-        currentBuf = InputBox.Text
-    end
-    histIdx = math.min(histIdx + 1, #history)
-    InputBox.Text = history[#history - histIdx + 1]
-    InputBox.CursorPosition = #InputBox.Text + 1
+local function getHistory()
+    local t = TabSystem and TabSystem.getActive and TabSystem.getActive()
+    return t and t.history or {}
 end
 
-local function historyDown()
-    if histIdx == 0 then return end
-    histIdx = histIdx - 1
-    if histIdx == 0 then
-        InputBox.Text = currentBuf
-    else
-        InputBox.Text = history[#history - histIdx + 1]
-    end
-    InputBox.CursorPosition = #InputBox.Text + 1
+local function getHistState()
+    local t = TabSystem and TabSystem.getActive and TabSystem.getActive()
+    if not t then return 0, "" end
+    return t.histIdx or 0, t.currentBuf or ""
+end
+
+local function setHistState(idx, buf)
+    local t = TabSystem and TabSystem.getActive and TabSystem.getActive()
+    if not t then return end
+    t.histIdx    = idx
+    t.currentBuf = buf
 end
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if not InputBox:IsFocused() then return end
+    local history = getHistory()
+    local histIdx, currentBuf = getHistState()
+
     if input.KeyCode == Enum.KeyCode.Up then
-        historyUp()
+        if #history == 0 then return end
+        if histIdx == 0 then
+            setHistState(histIdx, InputBox.Text)
+            histIdx, currentBuf = getHistState()
+        end
+        histIdx = math.min(histIdx + 1, #history)
+        setHistState(histIdx, currentBuf)
+        InputBox.Text = history[#history - histIdx + 1]
+        task.defer(function() InputBox.CursorPosition = #InputBox.Text + 1 end)
+
     elseif input.KeyCode == Enum.KeyCode.Down then
-        historyDown()
+        if histIdx == 0 then return end
+        histIdx = histIdx - 1
+        setHistState(histIdx, currentBuf)
+        if histIdx == 0 then
+            InputBox.Text = currentBuf
+        else
+            InputBox.Text = history[#history - histIdx + 1]
+        end
+        task.defer(function() InputBox.CursorPosition = #InputBox.Text + 1 end)
     end
 end)
 
+local COMMANDS_LIST = {
+    "install","termpref","clear","help","exec","dspkg","alias","echo","pkg"
+}
+
+local function highlightLine(text)
+    local code, comment = text:match("^(.-)(%s*%-%-.*)")
+    if comment then
+        return code .. '<font color="#555555">' .. comment .. '</font>'
+    end
+    return text
+end
+
 local function applyPrefs()
-    Wrapper.BackgroundTransparency  = prefs.Transparent
+    Wrapper.BackgroundColor3       = Color3.fromHex(prefs.BackgroundColor)
+    Wrapper.BackgroundTransparency = prefs.Transparent
     TitleBar.BackgroundTransparency = math.min(1, prefs.Transparent + 0.1)
     Prefix.Text = prefs.nickname .. ": "
     task.defer(updateInputLayout)
@@ -331,7 +370,7 @@ local function applyPrefs()
         if not BgImage then
             BgImage = Instance.new("ImageLabel")
             BgImage.Size = UDim2.new(1,0,1,0); BgImage.BackgroundTransparency = 1
-            BgImage.ScaleType = Enum.ScaleType.Crop; BgImage.ZIndex = 0; BgImage.Parent = Wrapper
+            BgImage.ScaleType = Enum.ScaleType.Crop; BgImage.ZIndex = 1; BgImage.Parent = Wrapper
         end
         BgImage.Image = prefs.BackgroundImage
     elseif BgImage then
@@ -339,6 +378,51 @@ local function applyPrefs()
     end
 end
 
+local function onTabSwitch(action, tabData)
+    if action == "save" then
+        return nil
+    elseif action == "load" then
+        for _, c in ipairs(OutputFrame:GetChildren()) do
+            if c:IsA("TextLabel") then c:Destroy() end
+        end
+        lineCount = 0
+        if tabData and tabData.outputLines then
+            for _, line in ipairs(tabData.outputLines) do
+                lineCount += 1
+                local lbl = Instance.new("TextLabel")
+                lbl.Name               = "L" .. lineCount
+                lbl.Size               = UDim2.new(1,0,0,0)
+                lbl.AutomaticSize      = Enum.AutomaticSize.Y
+                lbl.BackgroundTransparency = 1
+                lbl.Text               = line.text
+                lbl.TextColor3         = line.color
+                lbl.TextSize           = 12
+                lbl.FontFace           = termFont
+                lbl.TextXAlignment     = Enum.TextXAlignment.Left
+                lbl.TextWrapped        = true
+                lbl.LayoutOrder        = lineCount
+                lbl.Parent             = OutputFrame
+            end
+        end
+        bumpInputRow()
+        task.defer(function()
+            OutputFrame.CanvasPosition = Vector2.new(
+                0, math.max(0, OutputFrame.AbsoluteCanvasSize.Y - OutputFrame.AbsoluteSize.Y)
+            )
+        end)
+    end
+end
+
+local TabSystem = require and require("tabs") or loadstring(readfile("mjs/terminal/tabs.lua"))()
+TabSystem.init({
+    Wrapper      = Wrapper,
+    ScreenGui    = ScreenGui,
+    uiFont       = uiFont,
+    termFont     = termFont,
+    onTabSwitch  = onTabSwitch,
+})
+
+local aliases = {}
 local commands = {}
 commands["install"] = function(args)
     local author, target = args[1], args[2]
@@ -360,6 +444,106 @@ commands["install"] = function(args)
     end)
 end
 
+commands["exec"] = function(args)
+    local code = table.concat(args, " ")
+    if code == "" then
+        writeLine("  usage: exec <lua code>", Color3.fromHex("#ff5555"))
+        return
+    end
+    local fn, err = loadstring(code)
+    if not fn then
+        writeLine("✗ syntax: " .. tostring(err), Color3.fromHex("#ff5555"))
+        return
+    end
+    local ok, res = pcall(fn)
+    if not ok then
+        writeLine("✗ runtime: " .. tostring(res), Color3.fromHex("#ff5555"))
+    else
+        if res ~= nil then
+            writeLine("  → " .. tostring(res), Color3.fromHex("#aaaaaa"))
+        end
+    end
+end
+
+commands["echo"] = function(args)
+    writeLine("  " .. table.concat(args, " "), Color3.fromHex("#cccccc"))
+end
+
+commands["alias"] = function(args)
+    local name, cmd = args[1], args[2]
+    if not name or not cmd then
+        if not name then
+            for k, v in pairs(aliases) do
+                writeLine("  " .. k .. " → " .. v, Color3.fromHex("#666666"))
+            end
+        else
+            writeLine("  usage: alias <name> <command>", Color3.fromHex("#ff5555"))
+        end
+        return
+    end
+    local rest = {}
+    for i = 2, #args do table.insert(rest, args[i]) end
+    aliases[name] = table.concat(rest, " ")
+    writeLine("  alias: " .. name .. " → " .. aliases[name], Color3.fromHex("#66aaff"))
+end
+
+commands["pkg"] = function(args)
+    local sub = args[1]
+    if sub == "list" then
+        local cache = mcli._cache or {}
+        local found = false
+        for k, _ in pairs(cache) do
+            writeLine("  " .. k, Color3.fromHex("#888888"))
+            found = true
+        end
+        if not found then writeLine("  no packages cached", Color3.fromHex("#555555")) end
+    elseif sub == "remove" then
+        local key = args[2]
+        if not key then
+            writeLine("  usage: pkg remove <author/repo>", Color3.fromHex("#ff5555"))
+            return
+        end
+        if mcli._cache and mcli._cache[key] then
+            mcli._cache[key] = nil
+            writeLine("  removed: " .. key, Color3.fromHex("#66ff88"))
+        else
+            writeLine("  not cached: " .. key, Color3.fromHex("#ff5555"))
+        end
+    else
+        writeLine("  pkg list | pkg remove <author/repo>", Color3.fromHex("#666666"))
+    end
+end
+
+commands["dspkg"] = function(args)
+    local sub = args[1]
+    if sub == "--help" then
+        writeLine("  system packages:", Color3.fromHex("#888888"))
+        writeLine("    notepad   — текстовый редактор файлов", Color3.fromHex("#666666"))
+        writeLine("    assets    — резолвер ассетов по имени",  Color3.fromHex("#666666"))
+        writeLine("    updater   — авто-обновление mcli",       Color3.fromHex("#666666"))
+        writeLine("    filebrowser — браузер файлов executor",  Color3.fromHex("#666666"))
+        writeLine("  install: dspkg <name>", Color3.fromHex("#555555"))
+        return
+    end
+    local pkgName = sub
+    if not pkgName then
+        writeLine("  usage: dspkg --help | dspkg <name>", Color3.fromHex("#ff5555"))
+        return
+    end
+    bumpInputRow()
+    local stop = spinnerLine("installing system pkg: " .. pkgName)
+    bumpInputRow()
+    task.spawn(function()
+        local ok, err = pcall(mcli.get, "mcli", pkgName)
+        if ok then
+            stop("✓ dspkg/" .. pkgName .. " installed", Color3.fromHex("#66ff88"))
+        else
+            stop("✗ " .. tostring(err), Color3.fromHex("#ff5555"))
+        end
+        bumpInputRow()
+    end)
+end
+
 commands["termpref"] = function(args)
     local sub = args[1]
     if not sub then
@@ -372,7 +556,6 @@ commands["termpref"] = function(args)
         end
         return
     end
-
     if sub == "edit" then
         local key, val = args[2], args[3]
         if not key or not val then
@@ -382,8 +565,7 @@ commands["termpref"] = function(args)
         prefs[key] = tonumber(val) or val
         local warns = validatePrefs()
         for _, w in ipairs(warns) do writeLine("⚠ " .. w, Color3.fromHex("#ffaa33")) end
-        savePrefs()
-        applyPrefs()
+        savePrefs(); applyPrefs()
         writeLine("  " .. key .. " = " .. tostring(prefs[key]), Color3.fromHex("#66aaff"))
     else
         writeLine("  usage: termpref [edit <key> <value>]", Color3.fromHex("#777777"))
@@ -395,18 +577,22 @@ commands["clear"] = function()
         if c:IsA("TextLabel") then c:Destroy() end
     end
     lineCount = 0
+    local activeTab = TabSystem.getActive()
+    if activeTab then activeTab.outputLines = {} end
     bumpInputRow()
 end
 
 commands["help"] = function()
     for _, l in ipairs({
         "  install <author> <repo[/branch[/folder]]>  — установить пакет",
+        "  exec <lua code>                            — выполнить код",
+        "  echo <text>                                — вывести текст",
+        "  alias <name> <cmd>                         — создать алиас",
+        "  pkg list | pkg remove <author/repo>        — управление кешем",
+        "  dspkg --help                               — системные пакеты",
         "  termpref                                   — открыть preferences",
         "  termpref edit <key> <value>                — изменить настройку",
-        "    nickname        — имя в строке ввода",
-        "    Transparent     — прозрачность фона (0 - 1.0)",
-        "    BackgroundImage — rbxassetid://...",
-        "    HideKeybind     — клавиша показа/скрытия (F1-F12)",
+        "    nickname · Transparent · BackgroundColor · BackgroundImage · HideKeybind",
         "  clear                                      — очистить терминал",
         "  ↑ / ↓                                      — история команд",
     }) do writeLine(l, Color3.fromHex("#555555")) end
@@ -414,11 +600,19 @@ end
 
 local function runCommand(raw)
     if raw == "" then return end
-    if #history == 0 or history[#history] ~= raw then
-        table.insert(history, raw)
+    local firstWord = raw:match("^%S+")
+    if aliases[firstWord] then
+        raw = aliases[firstWord] .. raw:sub(#firstWord + 1)
     end
-    histIdx    = 0
-    currentBuf = ""
+    local activeTab = TabSystem.getActive()
+    if activeTab then
+        local h = activeTab.history
+        if #h == 0 or h[#h] ~= raw then
+            table.insert(h, raw)
+        end
+        activeTab.histIdx    = 0
+        activeTab.currentBuf = ""
+    end
 
     writeLine(prefs.nickname .. ": " .. raw, Color3.fromHex("#dddddd"))
     bumpInputRow()
@@ -426,10 +620,11 @@ local function runCommand(raw)
     local args = {}
     for w in raw:gmatch("%S+") do table.insert(args, w) end
     local cmd = table.remove(args, 1):lower()
+
     if commands[cmd] then
         commands[cmd](args)
     else
-        writeLine("  unknown: " .. cmd, Color3.fromHex("#ff5555"))
+        writeLine("  unknown: " .. cmd .. "  (type 'help')", Color3.fromHex("#ff5555"))
     end
     bumpInputRow()
 end
@@ -453,12 +648,9 @@ end)
 UserInputService.InputChanged:Connect(function(i)
     if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
         local d = i.Position - dragStart
-        local targetPos = UDim2.new(
-            startPos.X.Scale, startPos.X.Offset + d.X,
-            startPos.Y.Scale, startPos.Y.Offset + d.Y
-        )
         TweenService:Create(Wrapper, TweenInfo.new(0.04, Enum.EasingStyle.Linear), {
-            Position = targetPos
+            Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X,
+                                  startPos.Y.Scale, startPos.Y.Offset + d.Y)
         }):Play()
     end
 end)
@@ -496,8 +688,8 @@ CloseBtn.MouseButton1Click:Connect(function()
     task.delay(0.2, function() ScreenGui:Destroy() end)
 end)
 
-local minimized   = false
-local savedSize   = Vector2.new(DEF_W, DEF_H)
+local minimized = false
+local savedSize = Vector2.new(DEF_W, DEF_H)
 local function setMinimized(state)
     minimized = state
     OutputFrame.Visible = not minimized
@@ -518,16 +710,18 @@ HideBtn.MouseButton1Click:Connect(function()
     setMinimized(not minimized)
 end)
 
--- Keybind скрытия/показа из preferences
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
-    local keyName = input.KeyCode.Name  -- "F5", "F6" итд
-    if keyName == prefs.HideKeybind then
-        setMinimized(not minimized)
+    if input.KeyCode.Name == prefs.HideKeybind then
+        Wrapper.Visible = not Wrapper.Visible
+        if Wrapper.Visible then
+            task.delay(0.05, function() InputBox:CaptureFocus() end)
+        end
     end
 end)
 
-writeLine("Terminal  —  'help' for commands", Color3.fromHex("#3a3a3a"))
+
+writeLine("mcli terminal  —  'help' for commands", Color3.fromHex("#3a3a3a"))
 for _, w in ipairs(startupWarns) do
     writeLine("⚠ " .. w, Color3.fromHex("#ffaa33"))
 end
